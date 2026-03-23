@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SGS - National Sports Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['DM Sans', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            primary: { 50: '#eef9ff', 100: '#d9f1ff', 200: '#bce7ff', 300: '#8ed9ff', 400: '#59c2ff', 500: '#1A237E', 600: '#1a88f5', 700: '#136ee1', 800: '#1658b6', 900: '#184b8f' },
+            accent:  { 50: '#fff8ed', 100: '#ffefd4', 200: '#ffdba8', 300: '#ffc170', 400: '#ff9c37', 500: '#ff7b10', 600: '#f06006', 700: '#c74a07', 800: '#9e3a0e', 900: '#7f320f' },
+            slate:   { 850: '#172033', 950: '#0d1321' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .page { display: none; }
+    .page.active { display: block; }
+    .sidebar-link.active { background: rgba(51, 166, 255, 0.15); color: rgb(51, 166, 255); border-left: 3px solid rgb(51, 166, 255); }
+    .leaflet-container { z-index: 0; }
+    .chat-message { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .calendar-day:hover { background: rgba(51, 166, 255, 0.1); cursor: pointer; }
+    .calendar-day.has-event { background: rgba(51, 166, 255, 0.15); }
+    .calendar-day.conflict { background: rgba(245, 158, 11, 0.2); border: 1px dashed rgba(245, 158, 11, 0.6); }
+    .calendar-day.selected { background: rgba(51, 166, 255, 0.25); box-shadow: inset 0 0 0 2px rgb(51, 166, 255); }
+    .event-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin: 0 1px; }
+    .workflow-step.completed { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.08); }
+    .workflow-step.active { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+    .workflow-step.pending { border-left-color: #e2e8f0; }
+    .wf-status-badge { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.025em; }
+    #signature-pad { touch-action: none; }
+    [dir="rtl"] body { font-family: 'Noto Sans Arabic', 'DM Sans', system-ui, sans-serif; }
+
+    /* Video background */
+    #login-video-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+    }
+    #login-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(1px);
+      z-index: 1;
+    }
+    #login-card-wrapper {
+      position: relative;
+      z-index: 2;
+    }
+
+/* RTL - Sidebar reste visible */
+[dir="rtl"] #sidebar {
+  left: auto !important;
+  right: 0 !important;
+  border-right: none;
+  border-left: 1px solid;
+}
+
+[dir="rtl"] .lg\:ml-64 {
+  margin-left: 0 !important;
+  margin-right: 16rem !important;
+}
+
+[dir="rtl"] .sidebar-link {
+  border-left: none !important;
+  border-right: 3px solid transparent;
+}
+
+[dir="rtl"] .sidebar-link.active {
+  border-left: none !important;
+  border-right: 3px solid rgb(42, 16, 176) !important;
+}
+
+    /* Animation logo */
+@keyframes logoFade {
+  from {
+    opacity:0;
+    transform:scale(.9);
+  }
+  to {
+    opacity:1;
+    transform:scale(1);
+  }
+}
+
+/* Animation carte login */
+@keyframes cardSlide {
+  from {
+    opacity:0;
+    transform:translateY(40px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+/* Animation champs */
+@keyframes fieldFade {
+  from {
+    opacity:0;
+    transform:translateY(15px);
+  }
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+.logo-anim{
+  animation:logoFade .8s ease forwards;
+}
+
+.login-card-anim{
+  animation:cardSlide .9s ease forwards;
+}
+
+.field-anim{
+  opacity:0;
+  animation:fieldFade .6s ease forwards;
+}
+  </style>
+</head>
+<body class="font-sans bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300">
+<!-- ═══════════════════════════════════════════════════════════
+     LOGIN PAGE & AUTHENTIFICATION (Système complet)
+═══════════════════════════════════════════════════════════ -->
+<!-- PAGE D'ACCUEIL - SÉLECTION DU PORTAIL -->
+<div id="portal-page" class="min-h-screen flex items-center justify-center relative overflow-hidden p-4">
+
+    <!-- Video background -->
+    <video id="portal-video-bg" autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover z-0">
+        <source src="assets/intro.mp4" type="video/mp4">
+        <source src="intro.webm" type="video/webm">
+    </video>
+
+    <!-- Overlay sombre -->
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm z-1"></div>
+
+    <!-- Contenu principal -->
+    <div class="relative z-10 max-w-4xl w-full">
+        
+        <!-- Logo et titre -->
+        <div class="text-center mb-12">
+            <div class="w-32 h-32 mx-auto mb-6 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl flex items-center justify-center transition hover:scale-105">
+                <img src="assets/dataera.png" alt="Dataera Logo" class="w-24 h-24 object-contain">
+            </div>
+            <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
+                Système National de Gestion du Sport
+            </h1>
+            <p class="text-white/60 text-lg">
+                Ministère de la Jeunesse et des Sports
+            </p>
+        </div>
+        
+        <!-- Cartes des portails -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Portail Administration -->
+            <div onclick="selectPortal('admin')" 
+                 class="portal-card bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 hover:border-primary-400 transition-all cursor-pointer group">
+                <div class="w-16 h-16 mb-4 rounded-2xl bg-primary-500/20 flex items-center justify-center group-hover:scale-110 transition">
+                    <svg class="w-8 h-8 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Administration</h2>
+                <p class="text-white/60 text-sm mb-4">Direction centrale, ministère, décideurs</p>
+                <div class="flex flex-col text-white/40 text-sm space-y-1">
+                    <span>superadmin@sgs.gov</span>
+                    <span>national.admin@sgs.gov</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/10">
+                    <span class="text-primary-400 text-sm font-medium group-hover:underline">
+                        Accéder au portail →
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Portail Régions -->
+            <div onclick="selectPortal('regional')" 
+                 class="portal-card bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 hover:border-green-400 transition-all cursor-pointer group">
+                <div class="w-16 h-16 mb-4 rounded-2xl bg-green-500/20 flex items-center justify-center group-hover:scale-110 transition">
+                    <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Régions</h2>
+                <p class="text-white/60 text-sm mb-4">Directions régionales, gouvernorats</p>
+                <div class="flex flex-col text-white/40 text-sm space-y-1">
+                    <span>region.nord@sgs.gov</span>
+                    <span>region.sud@sgs.gov</span>
+                    <span>region.centre@sgs.gov</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/10">
+                    <span class="text-green-400 text-sm font-medium group-hover:underline">
+                        Accéder au portail →
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Portail Fédérations -->
+            <div onclick="selectPortal('federation')" 
+                 class="portal-card bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 hover:border-amber-400 transition-all cursor-pointer group">
+                <div class="w-16 h-16 mb-4 rounded-2xl bg-amber-500/20 flex items-center justify-center group-hover:scale-110 transition">
+                    <svg class="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Fédérations</h2>
+                <p class="text-white/60 text-sm mb-4">Fédérations sportives, ligues, associations</p>
+                <div class="flex flex-col text-white/40 text-sm space-y-1">
+                    <span>football@fed.sgs.gov</span>
+                    <span>handball@fed.sgs.gov</span>
+                    <span>athletisme@fed.sgs.gov</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/10">
+                    <span class="text-amber-400 text-sm font-medium group-hover:underline">
+                        Accéder au portail →
+                    </span>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Participants (lien secondaire) -->
+        <div class="text-center mt-8">
+            <button onclick="selectPortal('participant')" class="text-white/50 hover:text-white/80 text-sm transition">
+                👤 Accès participants (athlètes, entraîneurs)
+            </button>
+        </div>
+        
+        <!-- Pied de page -->
+        <div class="text-center mt-12 text-white/30 text-xs">
+            © 2026 Ministère de la Jeunesse et des Sports - Tous droits réservés
+        </div>
+    </div>
+</div>
+
+<!-- PAGE DE LOGIN  -->
+<div id="login-page" class="min-h-screen flex items-center justify-center relative overflow-hidden p-4 hidden">
+    
+    <!-- Video background -->
+    <video id="login-video-bg" autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover z-0">
+        <source src="assets/intro.mp4" type="video/mp4">
+        <source src="intro.webm" type="video/webm">
+    </video>
+
+    <!-- Overlay sombre -->
+    <div id="login-overlay" class="absolute inset-0 bg-black/55 backdrop-blur-[1px] z-1"></div>
+
+    <!-- Conteneur de la page de login -->
+    <div id="auth-container" class="w-full max-w-md relative z-10">
+        
+        <!-- Indicateur de portail -->
+        <div class="mb-4 flex items-center gap-2 text-white/60 text-sm bg-white/5 backdrop-blur-sm px-4 py-2 rounded-lg">
+            <button onclick="backToPortals()" class="hover:text-white transition flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Tous les portails
+            </button>
+            <span>/</span>
+            <span id="current-portal-label" class="text-white font-medium">Administration</span>
+        </div>
+        
+        <!-- Page de Connexion -->
+        <div id="login-auth-page" class="bg-white/10 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-white/20 modal-animation">
+            
+            <!-- Logo / Titre avec icône dynamique -->
+            <div class="text-center mb-8">
+                <div id="portal-icon" class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary-500/20 flex items-center justify-center">
+                    <!-- Icône changée dynamiquement -->
+                </div>
+                <h2 id="portal-title" class="text-2xl font-bold text-white">Administration</h2>
+                <p id="portal-subtitle" class="text-white/50 text-sm mt-1">
+                    Accès réservé au personnel administratif
+                </p>
+            </div>
+
+            <!-- Formulaire de connexion -->
+            <form class="space-y-5" onsubmit="event.preventDefault(); show2FAPage();">
+                <div>
+                    <label class="block text-sm font-medium text-white/80 mb-1">Email professionnel</label>
+                    <input type="email" id="login-email" value="superadmin@sgs.gov" 
+                           placeholder="prenom.nom@sgs.gov" 
+                           class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400 focus:border-transparent focus:bg-white/20 transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-white/80 mb-1">Mot de passe</label>
+                    <input type="password" id="login-password" value="password123" placeholder="••••••••" 
+                           class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400 focus:border-transparent focus:bg-white/20 transition">
+                </div>
+                
+                <!-- Options -->
+                <div class="flex items-center justify-between text-sm">
+                    <label class="flex items-center text-white/70">
+                        <input type="checkbox" class="mr-2 rounded bg-white/20 border-white/30"> Se souvenir de moi
+                    </label>
+                    <a href="#" onclick="showForgotPasswordModal()" class="text-blue-300 hover:text-blue-200">Mot de passe oublié?</a>
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-primary-600 hover:bg-primary-500 text-white font-semibold rounded-lg transition shadow-lg shadow-primary-900/40">
+                    Connexion
+                </button>
+            </form>
+            
+            <!-- Note d'aide -->
+            <p class="text-center text-white/30 text-xs mt-4">
+                Utilisez un email avec le domaine approprié :<br>
+                @sgs.gov (admin/régions) • @fed.sgs.gov (fédérations) • @sport.gov (participants)
+            </p>
+        </div>
+
+        <!-- Page Inscription (inchangée) -->
+        <div id="signup-page" class="hidden bg-white/10 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-white/20 modal-animation">
+            <!-- ... reste du code inscription inchangé ... -->
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white">Créer un compte</h2>
+                <p class="text-white/70 text-sm">Rejoignez la plateforme nationale du sport</p>
+            </div>
+
+            <form class="space-y-4" onsubmit="event.preventDefault(); showSuccessModal('Inscription réussie! Veuillez vérifier vos emails.');">
+                <div>
+                    <label class="block text-sm font-medium text-white/80 mb-1">Nom complet</label>
+                    <input type="text" class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-white/80 mb-1">Email</label>
+                    <input type="email" class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-white/80 mb-1">Mot de passe</label>
+                    <input type="password" class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-white/80 mb-1">Confirmer mot de passe</label>
+                    <input type="password" class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400">
+                </div>
+
+                <button type="submit" class="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-lg transition hover:scale-[1.02]">
+                    S'inscrire
+                </button>
+
+                <p class="text-center text-white/60 text-sm">
+                    Déjà inscrit? 
+                    <a href="#" onclick="showLoginPage()" class="text-blue-300 hover:text-blue-200">Se connecter</a>
+                </p>
+            </form>
+        </div>
+
+        <!-- Page 2FA (inchangée) -->
+        <div id="2fa-page" class="hidden bg-white/10 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-white/20 modal-animation">
+            <!-- ... reste du code 2FA inchangé ... -->
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-500/20 flex items-center justify-center">
+                    <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white">Double authentification</h2>
+                <p class="text-white/70 text-sm mt-2">Entrez le code à 6 chiffres envoyé à votre email</p>
+                <p class="text-white/50 text-xs" id="2fa-email">admin@sgs.gov</p>
+            </div>
+
+            <form class="space-y-6" onsubmit="event.preventDefault(); login();">
+                <div>
+                    <input type="text" maxlength="6" placeholder="000000" 
+                           class="w-full text-center text-2xl tracking-[0.5em] px-4 py-4 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400 font-mono">
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" onclick="showLoginPage()" class="flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition">
+                        Retour
+                    </button>
+                    <button type="submit" class="flex-1 py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition">
+                        Vérifier
+                    </button>
+                </div>
+
+                <p class="text-center">
+                    <a href="#" onclick="showLoginPage()" class="text-blue-300 hover:text-blue-200 text-sm">Renvoyer le code</a>
+                </p>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS  -->
+<!-- Modal Mot de passe oublié -->
+<div id="forgot-password-modal" class="fixed inset-0 flex items-center justify-center p-4 hidden z-50">
+    <!-- ... reste du code modal inchangé ... -->
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideModal('forgot-password-modal')"></div>
+    <div class="bg-white/10 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/20 max-w-md w-full modal-animation relative z-10">
+        <h3 class="text-2xl font-bold text-white mb-2">Réinitialisation</h3>
+        <p class="text-white/70 text-sm mb-6">Entrez votre email pour recevoir un lien de réinitialisation</p>
+        
+        <form onsubmit="event.preventDefault(); showSuccessModal('Email envoyé! Vérifiez votre boîte de réception.'); hideModal('forgot-password-modal');">
+            <input type="email" placeholder="votre@email.com" class="w-full px-4 py-3 rounded-lg bg-white/15 border border-white/25 text-white placeholder-white/40 focus:ring-2 focus:ring-primary-400 mb-4">
+            
+            <div class="flex gap-3">
+                <button type="button" onclick="hideModal('forgot-password-modal')" class="flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 text-white rounded-lg">
+                    Annuler
+                </button>
+                <button type="submit" class="flex-1 py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white rounded-lg">
+                    Envoyer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Succès -->
+<div id="success-modal" class="fixed inset-0 flex items-center justify-center p-4 hidden z-50">
+    <!-- ... reste du code modal inchangé ... -->
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideModal('success-modal')"></div>
+    <div class="bg-white/10 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/20 max-w-sm w-full modal-animation relative z-10 text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+            <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+        </div>
+        <h3 class="text-xl font-bold text-white mb-2" id="success-message">Succès!</h3>
+        <button onclick="hideModal('success-modal')" class="mt-4 px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg">
+            Fermer
+        </button>
+    </div>
+</div>
+
+<!-- AJOUTER CE CSS -->
+<style>
+    .portal-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: fadeInUp 0.6s ease forwards;
+        opacity: 0;
+    }
+    
+    .portal-card:nth-child(1) { animation-delay: 0.1s; }
+    .portal-card:nth-child(2) { animation-delay: 0.2s; }
+    .portal-card:nth-child(3) { animation-delay: 0.3s; }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .portal-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+</style>
+
+<script>
+// ============================================================
+// FONCTIONS DE GESTION DES PORTAILS ET AUTHENTIFICATION
+// ============================================================
+
+let selectedPortal = null;
+
+// Sélectionner un portail
+function selectPortal(portal) {
+    selectedPortal = portal;
+    
+    // Configuration des portails
+    const portalConfig = {
+        'admin': {
+            title: 'Administration',
+            subtitle: 'Accès réservé au personnel administratif',
+            icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+            color: 'primary',
+            placeholder: 'prenom.nom@sgs.gov',
+            emailDomain: '@sgs.gov',
+            example: 'superadmin@sgs.gov'
+        },
+        'regional': {
+            title: 'Directions Régionales',
+            subtitle: 'Accès aux directions régionales et gouvernorats',
+            icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z',
+            color: 'green',
+            placeholder: 'region.nom@sgs.gov',
+            emailDomain: '@sgs.gov',
+            example: 'region.nord@sgs.gov'
+        },
+        'federation': {
+            title: 'Fédérations Sportives',
+            subtitle: 'Accès aux fédérations, ligues et associations',
+            icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9',
+            color: 'amber',
+            placeholder: 'sport@fed.sgs.gov',
+            emailDomain: '@fed.sgs.gov',
+            example: 'football@fed.sgs.gov'
+        },
+        'participant': {
+            title: 'Espace Participants',
+            subtitle: 'Accès pour les sportifs, entraîneurs et participants',
+            icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+            color: 'slate',
+            placeholder: 'prenom.nom@sport.gov',
+            emailDomain: '@sport.gov',
+            example: 'marie.dubois@sport.gov'
+        }
+    };
+    
+    const config = portalConfig[portal];
+    
+    // Mettre à jour l'interface
+    document.getElementById('current-portal-label').textContent = config.title;
+    document.getElementById('portal-title').textContent = config.title;
+    document.getElementById('portal-subtitle').textContent = config.subtitle;
+    document.getElementById('login-email').placeholder = config.placeholder;
+    document.getElementById('login-email').value = config.example;
+    
+    // Mettre à jour l'icône
+    const iconContainer = document.getElementById('portal-icon');
+    iconContainer.innerHTML = `
+        <svg class="w-10 h-10 text-${config.color}-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${config.icon}"/>
+        </svg>
+    `;
+    iconContainer.className = `w-20 h-20 mx-auto mb-4 rounded-2xl bg-${config.color}-500/20 flex items-center justify-center`;
+    
+    // Sauvegarder le domaine pour validation
+    localStorage.setItem('expectedDomain', config.emailDomain);
+    
+    // Afficher la page de login
+    document.getElementById('portal-page').classList.add('hidden');
+    document.getElementById('login-page').classList.remove('hidden');
+}
+
+// Retour à la sélection des portails
+function backToPortals() {
+    document.getElementById('login-page').classList.add('hidden');
+    document.getElementById('portal-page').classList.remove('hidden');
+    
+    // Vider les champs
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+}
+
+// Fonction de connexion principale
+function login() {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const expectedDomain = localStorage.getItem('expectedDomain');
+    
+    // Vérifier le domaine selon le portail
+    if (!email.endsWith(expectedDomain)) {
+        showErrorModal(`Veuillez utiliser un email avec le domaine ${expectedDomain}`);
+        return;
+    }
+    
+    // Déterminer le rôle basé sur l'email
+    let role = 'participant';
+    let userName = formatUserName(email);
+    let region = null;
+    let federation = null;
+    
+    if (email.includes('superadmin')) {
+        role = 'super_admin';
+    } else if (email.includes('national') || email.includes('admin')) {
+        role = 'national_admin';
+    } else if (email.includes('region')) {
+        role = 'regional_manager';
+        // Extraire la région du format region.nord@sgs.gov
+        const regionPart = email.split('@')[0].split('.')[1];
+        localStorage.setItem('userRegion', regionPart || 'Centre');
+    } else if (email.includes('fed')) {
+        role = 'federation';
+        // Extraire la fédération
+        const federation = email.split('@')[0];
+        localStorage.setItem('userFederation', federation);
+    }
+    
+    // Sauvegarder les infos utilisateur
+    localStorage.setItem('userRole', role);
+    localStorage.setItem('userEmail', email);
+    localStorage.setItem('userName', userName);
+
+// ==== INITIALISATION MODULE DOCS ====
+     initDocumentModule();
+    
+    // Messages de bienvenue personnalisés
+    const welcomeMessages = {
+        'super_admin': 'Bienvenue Super Admin - Accès complet au système',
+        'national_admin': 'Bienvenue Admin National - Consultation des données nationales',
+        'regional_manager': `Bienvenue - Région ${localStorage.getItem('userRegion') || 'Centre'}`,
+        'federation': `Bienvenue - ${localStorage.getItem('userFederation') || 'Fédération'}`,
+        'participant': 'Bienvenue dans votre espace personnel'
+    };
+    
+    showSuccessModal(welcomeMessages[role] || 'Connexion réussie!');
+    
+    // Redirection vers l'application principale
+    setTimeout(() => {
+        document.getElementById('login-page').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+        document.getElementById('main-app').classList.add('flex');
+        
+        // Mettre à jour l'interface utilisateur
+        if (typeof updateUserInterface === 'function') {
+            updateUserInterface();
+        }
+        
+        // Naviguer vers le dashboard
+        if (typeof navigateTo === 'function') {
+            navigateTo('dashboard');
+        }
+    }, 1500);
+}
+
+// Formater le nom d'utilisateur
+function formatUserName(email) {
+    const parts = email.split('@')[0].split('.');
+    if (parts.length > 1) {
+        return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+    }
+    return email.split('@')[0];
+}
+
+// Afficher une modal d'erreur
+function showErrorModal(message) {
+    document.getElementById('success-message').textContent = message;
+    document.getElementById('success-modal').classList.remove('hidden');
+    
+    // Changer la couleur pour erreur
+    const modalContent = document.querySelector('#success-modal .bg-white\\/10');
+    if (modalContent) {
+        modalContent.classList.add('bg-red-500/20');
+        setTimeout(() => {
+            modalContent.classList.remove('bg-red-500/20');
+        }, 3000);
+    }
+}
+
+// Navigation entre pages d'authentification
+function showLoginPage() {
+    document.getElementById('login-auth-page').classList.remove('hidden');
+    document.getElementById('signup-page').classList.add('hidden');
+    document.getElementById('2fa-page').classList.add('hidden');
+}
+
+function showSignupPage() {
+    document.getElementById('login-auth-page').classList.add('hidden');
+    document.getElementById('signup-page').classList.remove('hidden');
+    document.getElementById('2fa-page').classList.add('hidden');
+}
+
+function show2FAPage() {
+    document.getElementById('login-auth-page').classList.add('hidden');
+    document.getElementById('signup-page').classList.add('hidden');
+    document.getElementById('2fa-page').classList.remove('hidden');
+    const email = document.getElementById('login-email').value;
+    document.getElementById('2fa-email').textContent = email;
+}
+
+function showForgotPasswordModal() {
+    document.getElementById('forgot-password-modal').classList.remove('hidden');
+}
+
+// Gestion des modals
+function hideModal(modalId) {
+    document.getElementById(modalId).classList.add('hidden');
+}
+
+function showSuccessModal(message) {
+    document.getElementById('success-message').textContent = message || 'Opération réussie!';
+    document.getElementById('success-modal').classList.remove('hidden');
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    // S'assurer que la page des portails est visible au démarrage
+    document.getElementById('portal-page').classList.remove('hidden');
+    document.getElementById('login-page').classList.add('hidden');
+    
+    // Initialiser avec le portail admin par défaut (optionnel)
+    // selectPortal('admin');
+
+    if (localStorage.getItem('userRole')) {
+    initDocumentModule();
+    }
+});
+
+// Fermer les modals avec Echap
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('[id$="-modal"]').forEach(modal => {
+            modal.classList.add('hidden');
+        });
+    }
+});
+</script>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MAIN APP (caché jusqu'au login)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="main-app" class="hidden flex min-h-screen">
+
+    <!-- Sidebar -->
+<aside id="sidebar" class="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col fixed h-full z-30 transform lg:translate-x-0 transition-transform duration-300">      <div class="p-6 border-b border-slate-200 dark:border-slate-800">
+        <h1 class="text-xl font-bold" style="color:#1A237E" data-i18n="app_name">SGS</h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-i18n="app_subtitle">Système national de gestion du sport</p>
+      </div>
+      <nav class="flex-1 overflow-y-auto p-3 space-y-0.5">
+        <a href="#" data-page="dashboard"       class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 active"   data-i18n="nav_dashboard">Tableau de bord</a>
+        <a href="#" data-page="security"        class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_security">Sécurité</a>
+        <a href="#" data-page="calendar"        class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_calendar">Calendrier</a>
+        <a href="#" data-page="workflow"        class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_workflow">Workflow</a>
+        <a href="#" data-page="documents" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/><span data-i18n="nav_documents">Gestion documentaire</span></a>
+        <!-- <a href="#" data-page="ai-documents"    class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_ai_docs">Génération des Documents </a>  -->
+        <a href="#" data-page="reservations"    class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition"><span data-i18n="reservations">Réservations</span></a>
+        <a href="#" data-page="reports"         class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_reports">Rapports</a>
+        <a href="#" data-page="infrastructure"  class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_infrastructure">Infrastructures</a>
+        <!-- <a href="#" data-page="gis"             class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_gis">Cartographie GIS</a> -->
+        <a href="#" data-page="analytics"       class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_analytics">Analytiques</a>
+        <a href="#" data-page="ai-infra"        class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_ai_eval">Évaluation IA</a>
+        <a href="#" data-page="notifications"   class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_notifications">Notifications</a>
+        <a href="#" data-page="sync"            class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"          data-i18n="nav_sync">Synchronisation</a>
+      </nav>
+      <div class="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+       
+        <button id="theme-toggle" class="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400">
+          <svg id="icon-sun"  class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <svg id="icon-moon" class="w-5 h-5"        fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          <span id="theme-label" data-i18n="theme_dark">Mode sombre</span>
+        </button>
+        <a href="#" onclick="logout(); return false;" class="mt-2 block text-center text-sm text-red-500 hover:text-red-600" data-i18n="logout">Déconnexion</a>
+      </div>
+    </aside>
+
+    <!-- Contenu principal -->
+    <div class="flex-1 lg:ml-64 flex flex-col min-h-screen">
+
+      <!-- Topbar -->
+      <header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+          <button id="sidebar-toggle" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Menu">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div>
+            <h2 id="page-title"    class="text-lg font-semibold text-slate-800 dark:text-slate-100">Tableau de bord</h2>
+            <p  id="page-subtitle" class="text-xs text-slate-500 dark:text-slate-400" data-i18n="page_subtitle_default">Système national de gestion du sport</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <!-- Language Toggle Buttons  -->
+          <div class="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+            <button id="lang-fr" class="lang-btn px-3 py-1.5 text-xs font-bold transition text-white" style="background:#1A237E" data-lang="fr">FR</button>
+            <button id="lang-ar" class="lang-btn px-3 py-1.5 text-xs font-bold transition bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400" data-lang="ar">ع</button>
+          </div>
+          <div class="relative">
+            <button id="notif-btn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 relative">
+              <svg class="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+          </div>
+          <div id="topbar-user-info" class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800" title="">
+            <div class="text-right">
+              <p id="topbar-user-name" class="text-sm font-medium text-slate-800 dark:text-slate-100"></p>
+              <p id="topbar-user-email" class="text-xs text-slate-500 dark:text-slate-400"></p>
+            </div>
+            <div id="topbar-avatar" class="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold transition-colors duration-300" style="background:#1A237E">—</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Contenu des pages -->
+      <main class="flex-1 p-6 overflow-auto">
+        <div id="content-area"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHATBOT
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="chatbot-panel" class="fixed bottom-6 right-6 z-50 hidden">
+    <div class="bg-white dark:bg-slate-850 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-96 h-[500px] flex flex-col overflow-hidden">
+    <div class="p-4 text-white flex items-center justify-between" style="background:#1A237E">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+          </div>
+          <span class="font-semibold">SGS Assistant</span>
+        </div>
+        <button onclick="toggleChatbot()" class="p-1 hover:bg-white/20 rounded">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3">
+        <div class="chat-message flex justify-start">
+          <div class="bg-slate-100 dark:bg-slate-700 rounded-2xl rounded-bl-md px-4 py-2 max-w-[85%]">
+            <p class="text-sm">Hello! I'm your SGS assistant. I can help with regulations, calendars, statistics, and infrastructure info. How can I help?</p>
+          </div>
+        </div>
+        <div class="space-y-2 mt-2">
+          <p class="text-xs text-slate-500 dark:text-slate-400">Suggested questions:</p>
+          <button class="suggested-q block w-full text-left text-sm px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">What are the next national events?</button>
+          <button class="suggested-q block w-full text-left text-sm px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">Show stadium capacity by region</button>
+          <button class="suggested-q block w-full text-left text-sm px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600">Travel authorization requirements</button>
+        </div>
+      </div>
+      <div class="p-3 border-t border-slate-200 dark:border-slate-700">
+        <div class="flex gap-2">
+          <input type="text" id="chat-input" placeholder="Ask about regulations, calendars..." class="flex-1 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:ring-2 focus:ring-primary-500">
+          <button onclick="sendChat()" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button id="chatbot-fab" onclick="toggleChatbot()" class="fixed bottom-6 right-6 w-14 h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg flex items-center justify-center z-40 transition">
+    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+  </button>
+  <script src="translations.js"></script>
+  <script src="app.js"></script>
+  <script src="document-module.js"></script>
+  <script src="calendar-module.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        if (typeof navigateTo !== 'function') return;
+        var _orig = navigateTo;
+        window.navigateTo = function(pageId) {
+        if (pageId === 'calendar' && typeof renderCalendarModule === 'function') {
+            document.querySelectorAll('.sidebar-link').forEach(el => el.classList.remove('active'));
+            var link = document.querySelector('[data-page="calendar"]');
+            if (link) link.classList.add('active');
+            document.getElementById('page-title').textContent = 'Calendrier & Événements';
+            document.getElementById('content-area').innerHTML = renderCalendarModule();
+            initCalendarModule();
+            return;
+        }
+        _orig(pageId);
+        };
+    }, 300);
+    });
+    </script>
+    <script src="report-module.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+        if (typeof navigateTo !== 'function') return;
+        var _orig = navigateTo;
+    
+        function loadModule(pageId) {
+            document.querySelectorAll('.sidebar-link').forEach(function(el){ el.classList.remove('active'); });
+            var link = document.querySelector('[data-page="' + pageId + '"]');
+            if (link) link.classList.add('active');
+            var sb = document.getElementById('sidebar');
+            if (sb) sb.classList.add('-translate-x-full');
+        }
+    
+        var chartInits = {
+            dashboard: function() {
+            var ctx = document.getElementById('chart-usage-main');
+            if (!ctx || ctx._chart) return;
+            var dk = document.documentElement.classList.contains('dark');
+            var tc = dk ? '#94a3b8' : '#64748b', gc = dk ? '#334155' : '#f1f5f9';
+            ctx._chart = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                labels: ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'],
+                datasets: [
+                    { label: 'Utilisateurs actifs', data: [120,190,180,250,210,160,200], borderColor:'rgb(51,166,255)', backgroundColor:'rgba(51,166,255,0.08)', fill:true, tension:0.4, pointRadius:4 },
+                    { label: 'Sessions', data: [200,310,290,380,330,240,310], borderColor:'rgba(255,123,16,0.6)', backgroundColor:'rgba(255,123,16,0.05)', fill:true, tension:0.4, borderDash:[4,3] }
+                ]
+                },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ y:{beginAtZero:true,ticks:{color:tc},grid:{color:gc}}, x:{ticks:{color:tc},grid:{display:false}} } }
+            });
+            document.querySelectorAll('.progress-bar[data-target]').forEach(function(b){ b.style.width=(b.dataset.target||0)+'%'; });
+            },
+            analytics: function() {
+            var dk = document.documentElement.classList.contains('dark');
+            var tc = dk ? '#94a3b8' : '#64748b', gc = dk ? '#334155' : '#e2e8f0';
+            var bc = ['rgba(51,166,255,0.8)','rgba(255,123,16,0.8)','rgba(34,197,94,0.8)','rgba(168,85,247,0.8)'];
+            var opts = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:tc } } }, scales:{ y:{ticks:{color:tc},grid:{color:gc}}, x:{ticks:{color:tc},grid:{color:gc}} } };
+            var er=document.getElementById('chart-events-region');
+            if(er&&!er._chart) er._chart=new Chart(er.getContext('2d'),{type:'bar',data:{labels:['Nord','Centre','Sud','Est'],datasets:[{label:'Evenements',data:[45,62,38,52],backgroundColor:bc}]},options:opts});
+            var oc=document.getElementById('chart-occupancy');
+            if(oc&&!oc._chart) oc._chart=new Chart(oc.getContext('2d'),{type:'line',data:{labels:['Jan','Fev','Mar','Avr','Mai'],datasets:[{label:'Occupation %',data:[72,78,75,82,79],borderColor:'rgb(255,123,16)',fill:true,tension:0.4}]},options:opts});
+            var va=document.getElementById('chart-validation');
+            if(va&&!va._chart) va._chart=new Chart(va.getContext('2d'),{type:'bar',data:{labels:['Auth.voyage','PV','Approbations'],datasets:[{label:'Jours',data:[2.3,1.8,3.1],backgroundColor:bc.slice(0,3)}]},options:opts});
+            var cf=document.getElementById('chart-conflicts');
+            if(cf&&!cf._chart) cf._chart=new Chart(cf.getContext('2d'),{type:'doughnut',data:{labels:['Resolus','En attente','Auto-suggeres'],datasets:[{data:[65,12,23],backgroundColor:['#22c55e','#f59e0b','#1A237E']}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{labels:{color:tc}}}}});
+            }
+        };
+    
+        window.navigateTo = function(pageId) {
+            if (pageId === 'calendar' && typeof renderCalendarModule === 'function') {
+            loadModule('calendar');
+            document.getElementById('page-title').textContent    = t('calendar_title');
+            document.getElementById('page-subtitle').textContent = t('calendar_subtitle');
+            document.getElementById('content-area').innerHTML = renderCalendarModule();
+            initCalendarModule();
+            return;
+            }
+            if (pageId === 'reports' && typeof renderReportModule === 'function') {
+            loadModule('reports');
+            document.getElementById('page-title').textContent    = t('reports_title');
+            document.getElementById('page-subtitle').textContent = t('reports_subtitle');
+            document.getElementById('content-area').innerHTML = renderReportModule();
+            initReportModule();
+            return;
+            }
+            _orig(pageId);
+            if (chartInits[pageId]) setTimeout(chartInits[pageId], 0);
+        };
+    
+        }, 300);
+    });
+    </script>
+<script src="infrastructure-module.js"></script>
+<script src="workflow-module.js"></script> 
+<script src="rbac-ui.js"></script>
+
+</body>
+</html>
