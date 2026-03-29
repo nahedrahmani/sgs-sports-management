@@ -841,10 +841,10 @@ document.addEventListener('keydown', function(e) {
   <button id="chatbot-fab" onclick="toggleChatbot()" class="fixed bottom-6 right-6 w-14 h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg flex items-center justify-center z-40 transition">
     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
   </button>
-  <script src="translations.js"></script>
-  <script src="app.js"></script>
-  <script src="document-module.js"></script>
-  <script src="calendar-module.js"></script>
+  <script src="i18n/translations.js"></script>
+  <script src="js/core/app.js"></script>
+  <script src="modules/document-module.js"></script>
+  <script src="modules/calendar-module.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
     setTimeout(function() {
@@ -865,7 +865,7 @@ document.addEventListener('keydown', function(e) {
     }, 300);
     });
     </script>
-    <script src="report-module.js"></script>
+    <script src="modules/report-module.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function() {
@@ -939,9 +939,9 @@ document.addEventListener('keydown', function(e) {
         }, 300);
     });
     </script>
-<script src="infrastructure-module.js"></script>
-<script src="workflow-module.js"></script> 
-<script src="rbac-ui.js"></script>
+<script src="modules/infrastructure-module.js"></script>
+<script src="modules/workflow-module.js"></script> 
+<script src="rbac/rbac-ui.js"></script>
 
 </body>
 </html>
